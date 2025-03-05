@@ -1,0 +1,135 @@
+---
+title: "Data Wrangling Workflow"
+author: "Tom Gibbens-Matsuyama, Michelle Yiv, Marina Kochuten"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+### Metadata overview
+
+#### Minnow Species
+
+-   F182: Northern Redbell Dace CPUE
+-   F183: Finescale Dace CPUE
+-   F209: Fathead Minnow CPUE
+-   F214: Northern Pearl Dace CPUE
+-   Minnows: Sum of all these minnow species CPUE
+
+#### Separate Species
+
+-   F382: Slimy Sculpin
+
+From this data we should do a purely BACI (Before-After Control-Impact) Design because there are strong patterns for this type.
+
+#### Lakes
+
+-   375: Experimental Group for 10,000 Aquacultured Rainbow Trout
+-   373: Immediately upstream from 375, primary treatment lake
+-   224 & 442: Incorporated in the study because they had fathead minnow populations (373 did not)
+
+#### Statistical Analyses
+
+Analyses conducted to compare trends over time between aquaculture and reference ecosystems. They used BACI ANOVA to evaluate the impact of aquaculture on minnow and sculpin abundance. These populations were squareroot transformed to normalise and homogenise residual distributions.
+
+Pre-impact minnow and sculpin from 1989 to 2002 were included for increased sample size in the analysis. The BACI design classified the before, during, and after years as the following:
+
+-   Before: Prior to 2003
+-   During: 2003 to 2007
+-   After: 2008 and later
+
+ANOVAS were conducted for minnows and sculpin in both the spring and fall. Plots and Tukey post hoc tests were used to determine the significance and direction of the differences.
+
+### Load libraries
+
+```{r}
+library(here)
+library(tidyverse)
+```
+
+### Load data
+
+```{r}
+minnows <- read_csv(here("data", "minnows_data.csv"))
+```
+
+#### Data Wrangling
+
+For our tests we need to have specific before, during, and after
+
+```{r}
+
+# Create a new column differentiating time periods
+minnows <- minnows %>% 
+  mutate(time = case_when(
+    between(Year, 1988, 2002) ~ "Before",
+    between(Year, 2003, 2007) ~ "During",
+    Year > 2007 ~ "After",
+    TRUE ~ NA
+  ))
+
+# Filter our data to spring 
+minnows_spring <- minnows %>% 
+  filter(Season == "aSpring") %>% 
+  mutate(Lake_chr = as.character(Lake),
+         time = fct_relevel(time, "Before", "During", "After"),
+         Lake = factor(Lake))
+  
+
+# Filter our data to autumn
+minnows_fall <- minnows %>% 
+  filter(Season == "zFall") %>% 
+  mutate(Lake_chr = as.character(Lake),
+         time = fct_relevel(time, "Before", "During", "After"),
+         Lake = factor(Lake))
+```
+
+### Let's visualize this data before we run our ANOVA
+
+##### For our data in the spring
+
+```{r}
+# Minnows data for the lakes
+ggplot(minnows_spring, aes(x = Lake_chr, y = Minnows, color = time)) + 
+  geom_boxplot()
+
+# Slimy Sculpin 
+ggplot(minnows_spring, aes(x = Lake_chr, y = F382, color = time)) +
+  geom_boxplot()
+```
+
+##### For our data in the fall
+
+```{r}
+ggplot(minnows_fall, aes(x = Lake_chr, y = Minnows, color = time)) +
+  geom_boxplot()
+
+# Slimy Sculpin
+ggplot(minnows_fall, aes(x = Lake_chr, y = F382, color = time)) +
+  geom_boxplot()
+```
+
+#### ANOVA Assumptions
+
+-   Each group should be from a normally distributed population
+    -   This means that each boxplot should be symmetrical. Is this true??
+-   The variance of the data within each group should be equal
+    -   This means that each boxplot should be roughly the same size, same spread
+-   The observations within each group should be independent
+    -   We can assume that this is true
+
+#### Let's try running the ANOVA test
+
+```{r}
+model <- aov(Minnows ~ Lake * time, data = minnows_spring)
+
+summary(model)
+```
+
+#### Run a Post Hoc Tukey Test
+
+```{r}
+TukeyHSD(model)
+```
+
